@@ -129,7 +129,7 @@ class REPL {
   async enter(chip) {
     console.log(">>> restart...", chip)
     await this.restart(chip);
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 10; i++) {
       await this.writer.write(Int8Array.from([0x03 /*interrupt*/ ]));
       await new Promise((resolve) => setTimeout(resolve, 100));
     }

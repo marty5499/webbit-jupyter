@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  webtrc:
+    image: docker.io/martyshu/webbit-jupyter:latest
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webbit.entrypoints=http"
+      - "traefik.http.routers.webbit.rule=Host(`webbit-jupyter.webduino.io`)"
+      - "traefik.http.middlewares.webbit-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.webbit.middlewares=webbit-https-redirect"
+      - "traefik.http.routers.webbit-secure.entrypoints=https"
+      - "traefik.http.routers.webbit-secure.rule=Host(`webbit-jupyter.webduino.io`)"
+      - "traefik.http.routers.webbit-secure.tls=true"
+      - "traefik.http.routers.webbit-secure.service=webbit"
+      - "traefik.http.services.webbit.loadbalancer.server.port=8888"
+      - "traefik.docker.network=traefik-public"      
+    restart: always
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+      - "/home/wa/work:/home/jovyan/—"
+      - "webbit-data:/tmp"
+
+volumes:
+  webbit-data: {}      
+      
+networks:
+  traefik-public:
+    external: true

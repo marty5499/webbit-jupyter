@@ -36,7 +36,7 @@ define([
               this.port = null;
             }            
             var clearId = blink();
-            await repl.enter();
+            await repl.enter('esp32');
             await repl.write(`
 import machine, neopixel
 np = neopixel.NeoPixel(machine.Pin(4), 25)

@@ -34,12 +34,16 @@ define([
             repl.port.ondisconnect = function () {
               usbBtn.style.backgroundColor = '#ffaaaa';
               this.port = null;
-            }
+            }            
             var clearId = blink();
             await repl.enter('esp32');
             await repl.write(`
 import machine, neopixel
 np = neopixel.NeoPixel(machine.Pin(4), 25)
+for led in range(25):
+  np[led] = (6,1,3)
+  np.write()
+np = neopixel.NeoPixel(machine.Pin(18), 25)
 for led in range(25):
   np[led] = (6,1,3)
   np.write()
@@ -52,6 +56,21 @@ for led in range(25):
         },
         'usb-connect',
         'usbconnect'),
+      /*
+      Jupyter.keyboard_manager.actions.register({
+        'help': 'enter REPL',
+        'icon': 'fa-cog',
+        'handler': async function () {
+            await repl.enterRAWREPL();
+            setTimeout(async function(){
+              await repl.sendCmd('from webai import *');
+              await repl.sendCmd('webai.init()');
+              await repl.sendCmd('webai.lcd.init()');
+              usbBtn.style.backgroundColor='#aaffaa';
+            },500);
+        }
+      }, 'usb-repl', 'usbrepl'),
+      */
       Jupyter.keyboard_manager.actions.register({
         'help': 'Run code',
         'icon': 'fa-play',
@@ -71,44 +90,7 @@ for led in range(25):
             return { value: "", done: false }
           });
         }
-      }, 'usb-deploy', 'usbdeploy'),
-      Jupyter.keyboard_manager.actions.register({
-        'help': 'deploy code',
-        'icon': 'fa-arrow-down',
-        'handler': async function () {
-          await repl.usbConnect();
-          repl.port.ondisconnect = function () {
-            usbBtn.style.backgroundColor = '#ffaaaa';
-            this.port = null;
-          }
-          var clearId = blink();
-          await repl.enter('esp32');
-          await repl.write(`
-import machine, neopixel
-np = neopixel.NeoPixel(machine.Pin(4), 25)
-for led in range(25):
-  np[led] = (6,1,3)
-  np.write()
-`);
-          clearInterval(clearId);
-          setTimeout(async function () {
-            var nb = Jupyter.notebook;
-            var idx = nb.get_anchor_index();
-            var cell = nb.get_cell(idx);
-            var code = cell.get_text();
-            cell.output_area.clear_output();
-            usbBtn.style.backgroundColor = '#aaffaa';
-            var writeLen = await repl.uploadFile('esp32', 'main.py', code);
-            var value = 'upload main.py ,' + writeLen + " Bytes";
-            cell.output_area.append_output({
-              "output_type": "display_data",
-              "metadata": {}, // included to avoid warning
-              "data": { "text/html": (value + "<br>") }
-            });            
-            await repl.restart();
-          }, 300)
-        }
-      }, 'usb-repl', 'usbrepl'),
+      }, 'usb-run', 'usbrun'),
     ]);
 
     usbBtn = btns.find('button')[0];
@@ -121,4 +103,4 @@ for led in range(25):
     load_ipython_extension: load_extension
   };
   return extension;
-});
+})

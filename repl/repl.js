@@ -75,7 +75,6 @@ class DataTransformer {
         var rtnByteArray = new Uint8Array([...this.byteArray.slice(0, this.readBytes)]);
         this.byteArray = new Uint8Array(
           [this.byteArray.slice(this.readBytes, byteArrayLength - this.readBytes)]);
-        //console.log("chunk:", rtnByteArray);
         controller.enqueue(rtnByteArray);
       }
     }
@@ -99,9 +98,10 @@ class REPL {
 
   async usbConnect() {
     var self = this;
+    this.running = false;
     const filter = { usbVendorId: 6790 };
     if (self.port == undefined) {
-      self.port = await navigator.serial.requestPort({ filters: [filter] });
+      self.port = await navigator.serial.requestPort({});
       await this.port.open({ baudRate: 115200, dateBits: 8, stopBits: 1, });
       this.writer = this.port.writable.getWriter();
       this.stream = new DataTransformer();
@@ -115,57 +115,91 @@ class REPL {
   }
 
   async restart(chip) {
-    await this.port.setSignals({ dataTerminalReady: false });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await this.port.setSignals({ dataTerminalReady: true });
-    if (chip == 'esp32') {
-      console.log("esp32 restart")
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 1700));
+    try {
+      await this.port.setSignals({ dataTerminalReady: false });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await this.port.setSignals({ dataTerminalReady: true });
+      if (chip == 'esp32') {
+        console.log("esp32 restart")
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1700));
+      }
+    } catch (e) {
+      this.port = undefined;
+      await this.usbConnect();
+      await this.restart(chip);
     }
   }
 
   async enter(chip) {
     console.log(">>> restart...", chip)
     await this.restart(chip);
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 3; i++) {
       await this.writer.write(Int8Array.from([0x03 /*interrupt*/ ]));
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    await this.writer.write(Int8Array.from([0x04 /*exit*/ ]));
+    //*
     await this.write('', function (data) {
-      return { value: '', done: false }
+      return { value: '', done: true }
     })
+    //*/
     console.log("REPL ready!");
   }
 
   async write(code, cb) {
+    if (this.running) {
+      if(cb!=null)
+      cb('running...');
+      return "";
+    }
+    this.running = true;
     var boundry = "===" + Math.random() + "==";
     await this.writer.write(Int8Array.from([0x01 /*RAW paste mode*/ ]));
-    code = "\r\nprint('" + boundry + "')\r\n" + code;
-    code = code + "\r\nprint('" + boundry + "')\r\n";
-    await this.writer.write(this.encoder.encode(code));
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await this.writer.write(this.encoder.encode("print('" + boundry + "')\r\n"));
+    var codes = code.split('\n');
+    for (var i = 0; i < codes.length; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await this.writer.write(this.encoder.encode(codes[i] + "\n"));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await this.writer.write(this.encoder.encode("print('" + boundry + "')\r\n"));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
     await this.writer.write(Int8Array.from([0x04 /*exit*/ ]));
     var startBoundry = false;
-    var rtnObj = ""+code.length;
+    var rtnObj = "" + code.length;
     while (true) {
       var { value, done } = await this.reader.read();
-      //console.log("value:", value);
       if (this.stream.readLine) {
-        if (value == ">OK" + boundry) {
-          startBoundry = true;
+        if (done) {
+          //console.log("end:",value);
+          this.running = false;
+          return rtnObj;
+        } else if (value.indexOf(">raw REPL; CTRL-B to exit") > 0) {
           continue;
-        }
-        if (value == boundry) {
+        } else if (value == ">OK" + boundry) {
+          startBoundry = true;
+          //console.log("startBoundry...",value);
+          continue;
+        } else if (value == boundry) {
+          //console.log("endBoundry...",value);
+          this.running = false;
           return rtnObj;
         } else if (startBoundry && cb != null) {
+          //console.log("output...",value);
           var { value, done } = await cb(value);
           if (done) return value;
         }
-      }
-      if (this.stream.readByteArray) {
+      } else if (this.stream.readByteArray) {
         var { value, done } = await cb(value);
-        if (done) return value;
+        if (done) {
+          this.running = false;
+          return value;
+        }
       }
     }
   }
